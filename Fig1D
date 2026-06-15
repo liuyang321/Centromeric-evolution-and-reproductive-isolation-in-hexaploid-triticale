@@ -1,0 +1,147 @@
+#!/bin/bash
+# LTR_annotation_pipeline.sh - 完整的LTR注释流程
+# 用法: ./LTR_annotation_pipeline.sh <genome.fa> <output_prefix> <threads>
+
+set -e  # 遇到错误立即退出
+
+# ========== 参数检查 ==========
+GENOME=$1
+PREFIX=$2
+THREADS=${3:-20}
+
+if [ -z "$GENOME" ] || [ -z "$PREFIX" ]; then
+    echo "用法: $0 <genome.fa> <output_prefix> [threads]"
+    echo "示例: $0 genome.fa ZX830 30"
+    exit 1
+fi
+
+# 检查输入文件
+if [ ! -f "$GENOME" ]; then
+    echo "错误: 找不到基因组文件 $GENOME"
+    exit 1
+fi
+
+# ========== 参数配置 ==========
+# LTR_FINDER参数
+LTR_FINDER_D=25000      # 最大LTR距离
+LTR_FINDER_d=3000       # 最小LTR距离  
+LTR_FINDER_L=2000       # 最大LTR长度
+LTR_FINDER_l=100        # 最小LTR长度
+LTR_FINDER_p=20         # 线程数
+LTR_FINDER_M=0.85       # 最小相似度
+
+# LTR_HARVEST参数
+LTR_HARVEST_seed=30
+LTR_HARVEST_minlen=100
+LTR_HARVEST_maxlen=2000
+LTR_HARVEST_mindist=3000
+LTR_HARVEST_maxdist=25000
+LTR_HARVEST_similar=85
+LTR_HARVEST_mintsd=4
+LTR_HARVEST_maxtsd=20
+LTR_HARVEST_motif="tgca"
+LTR_HARVEST_motifmis=1
+
+# ========== 创建输出目录 ==========
+mkdir -p results logs
+
+# ========== 1. LTR_FINDER预测 ==========
+echo "[$(date)] 开始 LTR_FINDER 预测..."
+LTR_FINDER_parallel \
+    -D $LTR_FINDER_D \
+    -d $LTR_FINDER_d \
+    -L $LTR_FINDER_L \
+    -l $LTR_FINDER_l \
+    -p $LTR_FINDER_p \
+    -C \
+    -M $LTR_FINDER_M \
+    $GENOME > results/${PREFIX}_ltr_finder.scn 2> logs/ltr_finder.log
+
+# ========== 2. LTR_HARVEST优化 ==========
+echo "[$(date)] 开始 LTR_HARVEST 优化..."
+LTR_HARVEST_parallel \
+    -seq $GENOME \
+    -overlaps best \
+    -seed $LTR_HARVEST_seed \
+    -minlenltr $LTR_HARVEST_minlen \
+    -maxlenltr $LTR_HARVEST_maxlen \
+    -mindistltr $LTR_HARVEST_mindist \
+    -maxdistltr $LTR_HARVEST_maxdist \
+    -similar $LTR_HARVEST_similar \
+    -mintsd $LTR_HARVEST_mintsd \
+    -maxtsd $LTR_HARVEST_maxtsd \
+    -motif $LTR_HARVEST_motif \
+    -motifmis $LTR_HARVEST_motifmis \
+    -vic 60 \
+    -xdrop 5 \
+    -mat 2 \
+    -mis -2 \
+    -ins -3 \
+    -del -3 > results/${PREFIX}_ltr_harvest.scn 2> logs/ltr_harvest.log
+
+# ========== 3. TR_retriever整合 ==========
+echo "[$(date)] 开始 TR_retriever 整合..."
+TR_retriever \
+    -genome $GENOME \
+    -inharvest results/${PREFIX}_ltr_harvest.scn \
+    -infinder results/${PREFIX}_ltr_finder.scn \
+    -threads $THREADS 2> logs/tr_retriever.log
+
+# ========== 4. 提取完整LTR序列 ==========
+echo "[$(date)] 提取完整LTR序列..."
+bedtools getfasta \
+    -fi $GENOME \
+    -bed ${PREFIX}.pass.list.bed-${PREFIX}.out.bed \
+    -fo results/${PREFIX}_flLTR.fa 2> logs/bedtools.log
+
+# ========== 5. TEsorter分类 ==========
+echo "[$(date)] 开始 TEsorter 分类..."
+TEsorter results/${PREFIX}_flLTR.fa \
+    -db rexdb-plant \
+    -p $THREADS 2> logs/tesorter.log
+
+# ========== 6. 转换为BED格式 ==========
+echo "[$(date)] 转换为BED格式..."
+less results/${PREFIX}_flLTR.fa.rexdb-plant.cls.tsv | \
+    awk '{gsub(/[:\-]/, "\t", $1); print $1"\t"$4}' | \
+    sed '1d' > results/${PREFIX}_ltr_classified.bed
+
+# ========== 7. 统计各家族数量 ==========
+echo "[$(date)] 统计家族分布..."
+awk -F'\t' '{print $4}' results/${PREFIX}_ltr_classified.bed | \
+    sort | uniq -c | sort -nr > results/${PREFIX}_family_counts.txt
+
+# ========== 8. 提取指定家族序列 ==========
+FAMILIES=${4:-"CRM CRR PAWRC1"}  # 默认家族，可自定义
+for FAMILY in $FAMILIES; do
+    echo "[$(date)] 提取 $FAMILY 家族..."
+    grep -w "$FAMILY" results/${PREFIX}_ltr_classified.bed > results/${PREFIX}_${FAMILY}_families.bed
+    
+    bedtools getfasta \
+        -fi $GENOME \
+        -bed results/${PREFIX}_${FAMILY}_families.bed \
+        -fo results/${PREFIX}_${FAMILY}_families.fa 2>> logs/extract_families.log
+done
+
+# ========== 9. 合并并抽样 ==========
+echo "[$(date)] 合并家族并抽样..."
+cat results/${PREFIX}_CRM_families.fa \
+    results/${PREFIX}_CRR_families.fa \
+    results/${PREFIX}_PAWRC1_families.fa > results/${PREFIX}_all_families.fa 2>/dev/null || \
+    echo "警告: 部分家族文件不存在"
+
+seqtk sample results/${PREFIX}_all_families.fa 1500 > results/${PREFIX}_sample_1500.fasta
+
+# ========== 10. MAFFT比对 ==========
+echo "[$(date)] 开始MAFFT比对..."
+mafft \
+    --thread $THREADS \
+    --auto \
+    --genafpair \
+    --localpair \
+    --maxiterate 1000 \
+    --adjustdirection \
+    results/${PREFIX}_sample_1500.fasta > results/${PREFIX}_aligned.fasta 2> logs/mafft.log
+
+echo "[$(date)] 流程完成！结果保存在 results/ 目录"
+
