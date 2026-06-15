@@ -1,0 +1,39 @@
+# ZX830 vs Weining 1R Pericentromere Synteny Analysis Pipeline
+
+# Define input files
+WEINING_FA=Weining.chr.fa
+ZX830_FA=ZX830.chr.fa
+
+WEINING_BED=Weining.1R.pericentromere.bed
+ZX830_BED=ZX830.1R.pericentromere.bed
+
+# 1. Extract pericentromere sequences
+bedtools getfasta -fi $WEINING_FA -bed $WEINING_BED -fo Weining.1R.pericentromere.fa
+bedtools getfasta -fi $ZX830_FA -bed $ZX830_BED -fo ZX830.1R.pericentromere.fa
+
+# 2. Pairwise alignment (minimap2)
+minimap2 -ax asm5 --eqx \
+ZX830.1R.pericentromere.fa \
+Weining.1R.pericentromere.fa \
+> ZX830_Weining_1R.sam
+
+# 3. Structural variation detection (SyRI)
+syri \
+-c ZX830_Weining_1R.sam \
+-r ZX830.1R.pericentromere.fa \
+-q Weining.1R.pericentromere.fa \
+-F S \
+--prefix ZX830_Weining_1R_syri
+
+# 4. Prepare genome file for plotsr
+cat <<EOF > 1R.genome.txt
+Weining.1R.pericentromere.fa    Weining_1R
+ZX830.1R.pericentromere.fa      ZX830_1R
+EOF
+
+# 5. Plot synteny
+plotsr \
+--sr ZX830_Weining_1R_syri.out \
+--genomes 1R.genome.txt \
+-o ZX830_Weining_1R_synteny.pdf \
+-W 14 -H 10
