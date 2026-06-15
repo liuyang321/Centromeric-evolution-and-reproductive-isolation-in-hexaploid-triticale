@@ -1,0 +1,141 @@
+############################################################
+# Figure 1F. Comparison of centromere size among parental,
+# synthetic and natural triticale accessions
+#
+# Author: XXX
+# Date: XXX
+############################################################
+
+library(ggplot2)
+library(ggpubr)
+library(rstatix)
+
+#############################
+# AA subgenome
+#############################
+
+AA <- data.frame(
+  Group = rep(c("Langdon", "ZX830", "Synthetic(S3)"), each = 7),
+  Value = c(
+    7,7,4,7,8,10,8,
+    9,7,7,10,12,12,7,
+    9,7,7,10,12,11,7
+  )
+)
+
+#############################
+# BB subgenome
+#############################
+
+BB <- data.frame(
+  Group = rep(c("Langdon", "ZX830", "Synthetic(S3)"), each = 7),
+  Value = c(
+    6,7,7,7,7,8,8,
+    7,7,8,10,7,8,8,
+    7,7,8,7,4,10,8
+  )
+)
+
+#############################
+# RR subgenome
+#############################
+
+RR <- data.frame(
+  Group = rep(c("Weining", "ZX830", "Synthetic(S3)"), each = 7),
+  Value = c(
+    20,15,13,14,17,12,25,
+    8,8,9,10,11,8,10,
+    18,16,15,15,14,17,22
+  )
+)
+
+############################################################
+# Function for plotting
+############################################################
+
+plot_box <- function(df, ylab){
+
+  comparisons <- combn(unique(df$Group), 2, simplify = FALSE)
+
+  ggplot(df, aes(x = Group,
+                 y = Value,
+                 fill = Group)) +
+
+    geom_boxplot(
+      width = 0.6,
+      alpha = 0.7,
+      outlier.shape = NA
+    ) +
+
+    geom_jitter(
+      width = 0.15,
+      size = 3,
+      alpha = 0.8
+    ) +
+
+    stat_compare_means(
+      method = "anova",
+      label.y = max(df$Value) * 1.15
+    ) +
+
+    stat_compare_means(
+      comparisons = comparisons,
+      method = "t.test",
+      label = "p.signif",
+      hide.ns = FALSE
+    ) +
+
+    scale_fill_manual(
+      values = c(
+        "Langdon" = "#66c2a5",
+        "Weining" = "#66c2a5",
+        "ZX830" = "#fc8d62",
+        "Synthetic(S3)" = "#8da0cb"
+      )
+    ) +
+
+    labs(
+      x = "",
+      y = ylab
+    ) +
+
+    theme_classic(base_size = 16) +
+
+    theme(
+      legend.title = element_blank(),
+      legend.position = "right"
+    )
+}
+
+############################################################
+# Generate plots
+############################################################
+
+p_AA <- plot_box(AA, "AA centromere size (Mb)")
+p_BB <- plot_box(BB, "BB centromere size (Mb)")
+p_RR <- plot_box(RR, "RR centromere size (Mb)")
+
+############################################################
+# Save figures
+############################################################
+
+ggsave(
+  "Figure4_AA.pdf",
+  p_AA,
+  width = 7,
+  height = 5
+)
+
+ggsave(
+  "Figure4_BB.pdf",
+  p_BB,
+  width = 7,
+  height = 5
+)
+
+ggsave(
+  "Figure4_RR.pdf",
+  p_RR,
+  width = 7,
+  height = 5
+)
