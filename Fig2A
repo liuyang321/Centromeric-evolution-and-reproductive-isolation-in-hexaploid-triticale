@@ -1,0 +1,97 @@
+# ===============================
+# 1. Load packages
+# ===============================
+install.packages(c("ggplot2", "dplyr", "sf",
+                   "rnaturalearth", "rnaturalearthdata",
+                   "scatterpie", "countrycode"))
+
+library(ggplot2)
+library(dplyr)
+library(sf)
+library(rnaturalearth)
+library(rnaturalearthdata)
+library(scatterpie)
+library(countrycode)
+
+# ===============================
+# 2. Load data
+# ===============================
+data <- read.csv("allcountry.csv")
+
+# ===============================
+# 3. Convert country names to ISO3 (IMPORTANT)
+# ===============================
+data$iso3 <- countrycode(data$country,
+                         origin = "country.name",
+                         destination = "iso3c")
+
+# remove unmatched countries (optional check)
+data <- data %>% filter(!is.na(iso3))
+
+# ===============================
+# 4. Get world map
+# ===============================
+world <- ne_countries(scale = "medium", returnclass = "sf")
+
+# ===============================
+# 5. Merge map + data
+# ===============================
+world_df <- world %>%
+  left_join(data, by = c("adm0_a3" = "iso3"))
+
+# replace NA with 0 for plotting
+world_df$AABB[is.na(world_df$AABB)] <- 0
+world_df$RR[is.na(world_df$RR)] <- 0
+world_df$AABBRR[is.na(world_df$AABBRR)] <- 0
+
+# ===============================
+# 6. Convert coordinates for scatterpie
+# ===============================
+world_df <- world_df %>%
+  mutate(
+    X = st_coordinates(st_centroid(geometry))[,1],
+    Y = st_coordinates(st_centroid(geometry))[,2],
+    total = AABB + RR + AABBRR
+  )
+
+# ===============================
+# 7. Plot map + pie charts
+# ===============================
+p <- ggplot() +
+  geom_sf(data = world_df,
+          fill = "grey95",
+          color = "white",
+          linewidth = 0.2) +
+
+  geom_scatterpie(
+    data = world_df %>% filter(total > 0),
+    aes(x = X, y = Y, r = sqrt(total) * 0.6),
+    cols = c("AABB", "RR", "AABBRR"),
+    alpha = 0.9,
+    color = "grey40",
+    linewidth = 0.15
+  ) +
+
+  scale_fill_manual(
+    values = c(
+      "AABB" = "#99A8D0",
+      "RR" = "#ED8F5A",
+      "AABBRR" = "#68B5A0"
+    ),
+    name = "Genotype"
+  ) +
+
+  coord_sf() +
+
+  theme_minimal() +
+  theme(
+    legend.position = "right",
+    panel.grid = element_blank(),
+    axis.title = element_blank()
+  )
+
+# ===============================
+# 8. Save figure (for paper)
+# ===============================
+ggsave("Global_triticale_distribution_pie.pdf",
+       p, width = 14, height = 8)
