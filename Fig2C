@@ -1,0 +1,71 @@
+############################################################
+# PCA visualization of triticale + parents
+############################################################
+
+pca_data <- read.table("merged_all_pca.eigenvec", header = FALSE)
+
+colnames(pca_data)[1:2] <- c("FID", "IID")
+colnames(pca_data)[3:12] <- paste0("PC", 1:10)
+
+eigenval <- scan("merged_all_pca.eigenval")
+pve <- round(eigenval / sum(eigenval) * 100, 2)
+
+############################################################
+# Sample annotation
+############################################################
+
+library(dplyr)
+
+pca_data <- pca_data %>%
+  mutate(Group = case_when(
+    grepl("^[0-9]+$", IID) ~ "AABBRR Hexaploid",
+    grepl("^B", IID) ~ "AABB Parent",
+    grepl("^CRR", IID) | grepl("^Lo", IID) ~ "RR Parent",
+    TRUE ~ "Unknown"
+  ))
+
+############################################################
+# Color scheme
+############################################################
+
+group_colors <- c(
+  "AABB Parent" = "#99A8D0",
+  "RR Parent" = "#ED8F5A",
+  "AABBRR Hexaploid" = "#68B5A0",
+  "Unknown" = "grey70"
+)
+
+############################################################
+# PCA plot
+############################################################
+
+library(ggplot2)
+
+ggplot(pca_data, aes(x = PC1, y = PC2,
+                      color = Group,
+                      shape = Group)) +
+
+  geom_point(size = 3, alpha = 0.85) +
+
+  scale_color_manual(values = group_colors) +
+  scale_shape_manual(values = c(
+    "AABB Parent" = 16,
+    "RR Parent" = 17,
+    "AABBRR Hexaploid" = 15,
+    "Unknown" = 4
+  )) +
+
+  labs(
+    x = paste0("PC1 (", pve[1], "%)"),
+    y = paste0("PC2 (", pve[2], "%)"),
+    title = "PCA of Hexaploid Triticale and Progenitors",
+    color = "Genetic group",
+    shape = "Genetic group"
+  ) +
+
+  theme_classic() +
+  theme(
+    legend.position = "bottom",
+    plot.title = element_text(hjust = 0.5, face = "bold"),
+    axis.line = element_line(color = "black")
+  )
