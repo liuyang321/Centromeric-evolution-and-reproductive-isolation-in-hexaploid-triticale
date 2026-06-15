@@ -1,0 +1,123 @@
+############################################################
+# 1. Load libraries
+############################################################
+
+library(readxl)
+library(tidyverse)
+
+############################################################
+# 2. Read input data
+############################################################
+
+df <- read_excel("pancentromere2.xlsx")
+
+colnames(df)[1] <- "Centromere"
+
+############################################################
+# 3. Convert to long format
+############################################################
+
+df_long <- df %>%
+  pivot_longer(
+    cols = -Centromere,
+    names_to = "Sample",
+    values_to = "Type"
+  )
+
+# convert real NA (not string "NA")
+df_long$Type[df_long$Type == "NA"] <- NA
+
+############################################################
+# 4. Define order of centromeres
+############################################################
+
+centromere_order <- c(
+  paste0(1:7, "A"),
+  paste0(1:7, "B"),
+  paste0(1:7, "R")
+)
+
+df_long$Centromere <- factor(df_long$Centromere,
+                             levels = centromere_order)
+
+############################################################
+# 5. Define sample order
+############################################################
+
+sample_order <- c("ZX830", "Perry", paste0("Sample", 1:8))
+
+df_long$Sample <- factor(df_long$Sample,
+                         levels = sample_order)
+
+############################################################
+# 6. Color mapping
+############################################################
+
+type_colors <- c(
+  "intact" = "#4DAF4A",
+  "shifted" = "#E41A1C",
+  "wide" = "#377EB8",
+  "narrow" = "#984EA3",
+  "broken" = "#FF7F00"
+)
+
+############################################################
+# 7. Plot
+############################################################
+
+p <- ggplot(df_long, aes(x = Sample, y = Centromere)) +
+
+  geom_point(
+    aes(fill = Type),
+    shape = 21,
+    size = 9,
+    color = "black",
+    stroke = 0.6
+  ) +
+
+  scale_fill_manual(
+    values = type_colors,
+    na.value = "white",
+    name = "Centromere state"
+  ) +
+
+  scale_y_discrete(limits = rev(centromere_order)) +
+
+  theme_void() +
+
+  theme(
+    plot.background = element_rect(fill = "black", color = NA),
+    panel.background = element_rect(fill = "black", color = NA),
+
+    axis.text.x = element_text(
+      color = "white",
+      size = 11,
+      angle = 45,
+      hjust = 1
+    ),
+
+    axis.text.y = element_text(color = "white", size = 11),
+
+    legend.background = element_rect(fill = "black", color = NA),
+    legend.key = element_rect(fill = "black", color = NA),
+
+    legend.text = element_text(color = "white"),
+    legend.title = element_text(color = "white"),
+
+    plot.margin = margin(20, 20, 20, 20)
+  )
+
+############################################################
+# 8. Save figure (publication-ready)
+############################################################
+
+ggsave(
+  filename = "Fig2D_pan_centromere_status.pdf",
+  plot = p,
+  width = 10,
+  height = 7,
+  device = "pdf",
+  bg = "black"
+)
+
+message("Figure saved: Fig2D_pan_centromere_status.pdf")
