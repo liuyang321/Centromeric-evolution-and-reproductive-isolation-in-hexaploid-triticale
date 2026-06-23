@@ -3,3 +3,6 @@ Two near-complete assemblies reveal R-subgenome structural and centromeric diver
 This repository provides all code and analysis workflows used to generate the figures and results presented in the manuscript “Two near-complete assemblies reveal R-subgenome structural and centromeric divergence associated with reproductive isolation in hexaploid triticale”.
 
 The analyses include genome assembly comparison, subgenome-resolved structural variation detection, centromere evolution analysis, population genomic analyses (PCA), pan-centromere profiling, and synteny visualization between two hexaploid triticale genomes (ZX830 and PT) and their progenitor species.
+
+For Fig. 1A, the raw data are embedded directly in the corresponding plotting script.
+Fig2A was generated using the raw data file allcountry.csv.
