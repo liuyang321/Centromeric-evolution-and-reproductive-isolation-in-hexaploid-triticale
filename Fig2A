@@ -1,97 +1,111 @@
-# ===============================
-# 1. Load packages
-# ===============================
-install.packages(c("ggplot2", "dplyr", "sf",
-                   "rnaturalearth", "rnaturalearthdata",
-                   "scatterpie", "countrycode"))
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
 
-library(ggplot2)
-library(dplyr)
-library(sf)
-library(rnaturalearth)
-library(rnaturalearthdata)
-library(scatterpie)
-library(countrycode)
+"""
+Plot country-level accession summary for AABB, RR, and AABBRR accessions.
 
-# ===============================
-# 2. Load data
-# ===============================
-data <- read.csv("allcountry.csv")
+Input file:
+    data/allcountry.csv
 
-# ===============================
-# 3. Convert country names to ISO3 (IMPORTANT)
-# ===============================
-data$iso3 <- countrycode(data$country,
-                         origin = "country.name",
-                         destination = "iso3c")
+Required columns:
+    country,AABB,RR,AABBRR
 
-# remove unmatched countries (optional check)
-data <- data %>% filter(!is.na(iso3))
+Output:
+    figures/country_level_accession_summary_top15.png
+    figures/country_level_accession_summary_top15.pdf
+"""
 
-# ===============================
-# 4. Get world map
-# ===============================
-world <- ne_countries(scale = "medium", returnclass = "sf")
+import pandas as pd
+import matplotlib.pyplot as plt
+from pathlib import Path
 
-# ===============================
-# 5. Merge map + data
-# ===============================
-world_df <- world %>%
-  left_join(data, by = c("adm0_a3" = "iso3"))
 
-# replace NA with 0 for plotting
-world_df$AABB[is.na(world_df$AABB)] <- 0
-world_df$RR[is.na(world_df$RR)] <- 0
-world_df$AABBRR[is.na(world_df$AABBRR)] <- 0
+def plot_country_accession_summary(
+    input_csv="data/allcountry.csv",
+    output_dir="figures",
+    top_n=15
+):
+    # Load data
+    df = pd.read_csv(input_csv)
 
-# ===============================
-# 6. Convert coordinates for scatterpie
-# ===============================
-world_df <- world_df %>%
-  mutate(
-    X = st_coordinates(st_centroid(geometry))[,1],
-    Y = st_coordinates(st_centroid(geometry))[,2],
-    total = AABB + RR + AABBRR
-  )
+    group_cols = ["AABB", "RR", "AABBRR"]
 
-# ===============================
-# 7. Plot map + pie charts
-# ===============================
-p <- ggplot() +
-  geom_sf(data = world_df,
-          fill = "grey95",
-          color = "white",
-          linewidth = 0.2) +
+    # Calculate total number of accessions per country
+    df["Total"] = df[group_cols].sum(axis=1)
 
-  geom_scatterpie(
-    data = world_df %>% filter(total > 0),
-    aes(x = X, y = Y, r = sqrt(total) * 0.6),
-    cols = c("AABB", "RR", "AABBRR"),
-    alpha = 0.9,
-    color = "grey40",
-    linewidth = 0.15
-  ) +
+    # Sort countries by total accession number
+    df = df.sort_values("Total", ascending=False).reset_index(drop=True)
 
-  scale_fill_manual(
-    values = c(
-      "AABB" = "#99A8D0",
-      "RR" = "#ED8F5A",
-      "AABBRR" = "#68B5A0"
-    ),
-    name = "Genotype"
-  ) +
+    # Keep top N countries and merge the rest as "Others"
+    top = df.iloc[:top_n].copy()
+    others = df.iloc[top_n:][group_cols].sum()
 
-  coord_sf() +
+    others_row = pd.DataFrame([{
+        "country": "Others",
+        "AABB": others["AABB"],
+        "RR": others["RR"],
+        "AABBRR": others["AABBRR"],
+        "Total": others.sum()
+    }])
 
-  theme_minimal() +
-  theme(
-    legend.position = "right",
-    panel.grid = element_blank(),
-    axis.title = element_blank()
-  )
+    plot_df = pd.concat([top, others_row], ignore_index=True)
 
-# ===============================
-# 8. Save figure (for paper)
-# ===============================
-ggsave("Global_triticale_distribution_pie.pdf",
-       p, width = 14, height = 8)
+    # Create output directory
+    output_dir = Path(output_dir)
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    # Plot
+    fig, ax = plt.subplots(figsize=(9, 7.5))
+
+    left = pd.Series([0] * len(plot_df))
+
+    for col in group_cols:
+        ax.barh(
+            plot_df["country"],
+            plot_df[col],
+            left=left,
+            label=col
+        )
+        left = left + plot_df[col]
+
+    # Add total accession number at the end of each bar
+    for i, total in enumerate(plot_df["Total"]):
+        ax.text(
+            total + 0.5,
+            i,
+            str(int(total)),
+            va="center",
+            fontsize=9
+        )
+
+    ax.set_xlabel("Number of accessions")
+    ax.set_ylabel("")
+    ax.set_title("Country-level summary of accession origins")
+    ax.legend(frameon=False)
+
+    # Largest bar on top
+    ax.invert_yaxis()
+
+    # Add space for total labels
+    ax.set_xlim(0, plot_df["Total"].max() + 8)
+
+    plt.tight_layout()
+
+    # Save figure
+    png_path = output_dir / "country_level_accession_summary_top15.png"
+    pdf_path = output_dir / "country_level_accession_summary_top15.pdf"
+
+    plt.savefig(png_path, dpi=300, bbox_inches="tight")
+    plt.savefig(pdf_path, bbox_inches="tight")
+    plt.close()
+
+    print(f"Saved: {png_path}")
+    print(f"Saved: {pdf_path}")
+
+
+if __name__ == "__main__":
+    plot_country_accession_summary(
+        input_csv="data/allcountry.csv",
+        output_dir="figures",
+        top_n=15
+    )
