@@ -1,0 +1,207 @@
+# 安装必要的包（如果尚未安装）
+if (!require("readxl")) install.packages("readxl")
+if (!require("ggplot2")) install.packages("ggplot2")
+if (!require("tidyr")) install.packages("tidyr")
+if (!require("dplyr")) install.packages("dplyr")
+if (!require("ggpubr")) install.packages("ggpubr")
+if (!require("rstatix")) install.packages("rstatix")
+
+# 加载包
+library(readxl)
+library(ggplot2)
+library(tidyr)
+library(dplyr)
+library(ggpubr)
+library(rstatix)
+
+# 设置文件路径
+file_path <- "D:/Triticale/Fig/Fig5/pancentromere3.xlsx"
+
+# 读取数据
+df <- read_excel(file_path)
+
+# 查看数据结构
+str(df)
+head(df)
+
+# 将数据从宽格式转换为长格式（便于绘图）
+df_long <- df %>%
+  pivot_longer(
+    cols = -Centromere,  # 排除Centromere列
+    names_to = "Group",  # 新列名：A/B/R
+    values_to = "Value"  # 新列名：对应的数值
+  )
+
+# 确保Group为因子类型（控制绘图顺序）
+df_long$Group <- factor(df_long$Group, levels = c("A", "B", "R"))
+
+# ============================================
+# 统计分析：ANOVA + Benjamini-Hochberg FDR校正
+# ============================================
+
+cat("\n========== 统计分析 ==========\n")
+
+# 1. 正态性检验（Shapiro-Wilk test）
+cat("\n--- 正态性检验 ---\n")
+norm_test <- df_long %>%
+  group_by(Group) %>%
+  shapiro_test(Value)
+print(norm_test)
+
+# 2. 方差齐性检验（Levene's test）
+cat("\n--- 方差齐性检验 ---\n")
+levene_test <- df_long %>%
+  levene_test(Value ~ Group)
+print(levene_test)
+
+# 3. 单因素ANOVA
+cat("\n--- 单因素ANOVA ---\n")
+anova_result <- df_long %>%
+  anova_test(Value ~ Group)
+print(anova_result)
+
+# 4. 事后检验：pairwise t-test with Benjamini-Hochberg FDR correction
+cat("\n--- 事后检验 (pairwise t-test with FDR correction) ---\n")
+posthoc_test <- df_long %>%
+  pairwise_t_test(
+    Value ~ Group,
+    p.adjust.method = "fdr"  # Benjamini-Hochberg FDR校正
+  )
+print(posthoc_test)
+
+# 5. 提取显著性标记
+cat("\n--- 显著性标记 (FDR-adjusted p-values) ---\n")
+sig_data <- posthoc_test %>%
+  mutate(
+    p.adj.signif = case_when(
+      p.adj < 0.001 ~ "***",
+      p.adj < 0.01 ~ "**",
+      p.adj < 0.05 ~ "*",
+      TRUE ~ "ns"
+    )
+  ) %>%
+  select(group1, group2, p.adj, p.adj.signif)
+print(sig_data)
+
+# 保存统计结果到CSV
+write.csv(sig_data, "D:/Triticale/Fig/Fig5/statistics_results.csv", row.names = FALSE)
+
+# 自定义主题：无网格线，细线条，简洁风格
+my_theme <- theme_minimal() +
+  theme(
+    plot.title = element_text(hjust = 0.5, size = 14, face = "bold"),
+    axis.title = element_text(size = 12),
+    axis.text = element_text(size = 11),
+    legend.position = "none",  # 隐藏图例
+    # 去掉所有网格线
+    panel.grid.major = element_blank(),
+    panel.grid.minor = element_blank(),
+    # 细坐标轴线
+    axis.line = element_line(color = "black", size = 0.3),
+    # 白色背景
+    panel.background = element_rect(fill = "white", color = NA),
+    plot.background = element_rect(fill = "white", color = NA),
+    # 细刻度线
+    axis.ticks = element_line(color = "black", size = 0.3),
+    axis.ticks.length = unit(0.15, "cm")
+  )
+
+# ============================================
+# 方案1：箱线图 + 抖动点 + 显著性标记
+# ============================================
+
+# 计算每组最大值用于定位显著性标记
+y_max <- max(df_long$Value)
+y_range <- diff(range(df_long$Value))
+
+# 准备显著性标记数据
+sig_annotations <- sig_data %>%
+  mutate(
+    y.position = case_when(
+      group1 == "A" & group2 == "B" ~ y_max + y_range * 0.10,
+      group1 == "A" & group2 == "R" ~ y_max + y_range * 0.20,
+      group1 == "B" & group2 == "R" ~ y_max + y_range * 0.15
+    ),
+    label = p.adj.signif
+  )
+
+p1 <- ggplot(df_long, aes(x = Group, y = Value, fill = Group)) +
+  # 细箱线图
+  geom_boxplot(width = 0.6, alpha = 0.7, outlier.shape = NA, 
+               size = 0.4, color = "black") +
+  # 细边框的抖动点
+  geom_jitter(width = 0.15, size = 2, alpha = 0.6, shape = 21, 
+              aes(fill = Group), color = "black", stroke = 0.3) +
+  # 添加显著性标记
+  stat_pvalue_manual(
+    sig_annotations,
+    label = "p.adj.signif",
+    tip.length = 0.01,
+    size = 4.5,
+    bracket.size = 0.3,
+    hide.ns = FALSE  # 显示ns（不显著）
+  ) +
+  labs(
+    title = "Boxplot with Jitter Points",
+    subtitle = paste0("ANOVA p = ", format(anova_result$p, digits = 3),
+                      "; FDR-corrected pairwise comparisons"),
+    x = "Centromere Group",
+    y = "Value",
+    caption = "ns, not significant; ** FDR-adjusted p < 0.01"
+  ) +
+  my_theme +
+  scale_fill_brewer(palette = "Set2") +
+  # 扩展y轴以容纳显著性标记
+  scale_y_continuous(expand = expansion(mult = c(0.05, 0.15)))
+
+# 显示图形
+print(p1)
+
+# 保存图形
+ggsave("D:/Triticale/Fig/Fig5/boxplot_with_stats.png", p1, width = 7, height = 5.5, dpi = 300)
+
+# ============================================
+# 添加统计摘要
+# ============================================
+
+cat("\n========== 数据统计摘要 ==========\n")
+df_summary <- df_long %>%
+  group_by(Group) %>%
+  summarise(
+    Mean = round(mean(Value, na.rm = TRUE), 3),
+    SD = round(sd(Value, na.rm = TRUE), 3),
+    SEM = round(sd(Value, na.rm = TRUE) / sqrt(n()), 3),
+    Median = round(median(Value, na.rm = TRUE), 3),
+    Min = round(min(Value, na.rm = TRUE), 3),
+    Max = round(max(Value, na.rm = TRUE), 3),
+    N = n()
+  )
+print(df_summary)
+
+# 保存统计摘要
+write.csv(df_summary, "D:/Triticale/Fig/Fig5/summary_statistics.csv", row.names = FALSE)
+
+# ============================================
+# 输出完整统计报告
+# ============================================
+
+cat("\n========== 完整统计报告 ==========\n")
+cat("\n【统计方法】\n")
+cat("1. 正态性检验: Shapiro-Wilk test\n")
+cat("2. 方差齐性检验: Levene's test\n")
+cat("3. 组间比较: One-way ANOVA\n")
+cat("4. 事后检验: Pairwise t-test with Benjamini-Hochberg FDR correction\n\n")
+
+cat("【ANOVA结果】\n")
+cat(paste0("F-statistic = ", round(anova_result$F, 3), 
+           ", df = ", anova_result$DFn, ", ", anova_result$DFd,
+           ", p = ", format(anova_result$p, digits = 4), "\n\n"))
+
+cat("【事后检验结果 (FDR-adjusted p-values)】\n")
+print(sig_data)
+
+cat("\n【显著性标记说明】\n")
+cat("*** : FDR-adjusted p < 0.001\n")
+cat("**  : FDR-adjusted p < 0.01\n")
+cat("*   : FDR-adjusted p < 0.05\n")
+cat("ns  : FDR-adjusted p ≥ 0.05 (not significant)\n")
