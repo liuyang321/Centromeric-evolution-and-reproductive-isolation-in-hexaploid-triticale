@@ -1,0 +1,83 @@
+library(ggplot2)
+library(dplyr)
+
+# 真实数据
+df <- data.frame(
+  Genotype = c("F1", "F1", "F1", "ZX830", "ZX830", "ZX830"),
+  Replicate = c("plant1", "plant2", "plant3", "plant1", "plant2", "plant3"),
+  Abnormal = c(320, 300, 370, 46, 31, 30),
+  Total = c(500, 500, 500, 500, 500, 500)
+)
+
+# 计算异常花粉比例
+df <- df %>%
+  mutate(Proportion = Abnormal / Total * 100)
+
+# 以单株为统计单位进行 t-test
+test <- t.test(Proportion ~ Genotype, data = df)
+
+pvalue <- test$p.value
+sig_label <- ifelse(pvalue < 0.01, "**",
+                    ifelse(pvalue < 0.05, "*", "ns"))
+
+print(df)
+print(test)
+
+# 计算均值和标准差
+summary_df <- df %>%
+  group_by(Genotype) %>%
+  summarise(
+    mean = mean(Proportion),
+    sd = sd(Proportion),
+    .groups = "drop"
+  )
+
+# 作图
+p <- ggplot(summary_df, aes(x = Genotype, y = mean, fill = Genotype)) +
+  geom_col(
+    width = 0.55,
+    color = "black",
+    linewidth = 0.08
+  ) +
+  geom_errorbar(
+    aes(ymin = mean - sd, ymax = mean + sd),
+    width = 0.12,
+    linewidth = 0.08
+  ) +
+  geom_jitter(
+    data = df,
+    aes(x = Genotype, y = Proportion),
+    width = 0.06,
+    size = 1.2,
+    shape = 16,
+    color = "black",
+    inherit.aes = FALSE
+  ) +
+  scale_fill_manual(values = c("F1" = "#8AA62A", "ZX830" = "#D98C5A")) +
+  scale_y_continuous(
+    limits = c(0, 100),
+    expand = c(0, 0)
+  ) +
+  labs(
+    x = NULL,
+    y = "Proportion of abnormal pollen (%)"
+  ) +
+  theme_classic(base_size = 12) +
+  theme(
+    legend.position = "none",
+    axis.text = element_text(color = "black"),
+    axis.title.y = element_text(color = "black"),
+    axis.line = element_line(linewidth = 0.10),
+    axis.ticks = element_line(linewidth = 0.10),
+    axis.ticks.length = unit(1.2, "mm")
+  ) +
+  annotate("segment", x = 1, xend = 2, y = 82, yend = 82, linewidth = 0.08) +
+  annotate("segment", x = 1, xend = 1, y = 80, yend = 82, linewidth = 0.08) +
+  annotate("segment", x = 2, xend = 2, y = 80, yend = 82, linewidth = 0.08) +
+  annotate("text", x = 1.5, y = 85, label = sig_label, size = 3.5)
+
+p
+
+# 保存
+ggsave("abnormal_pollen_barplot.pdf", p, width = 2.0, height = 3.0)
+ggsave("abnormal_pollen_barplot.png", p, width = 2.0, height = 3.0, dpi = 600)
