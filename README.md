@@ -7,5 +7,6 @@ The analyses include genome assembly comparison, subgenome-resolved structural v
 For Fig1A, the raw data are embedded directly in the corresponding plotting script.
 Fig2A was generated using the raw data file allcountry.csv.
 Fig2D was generated using the raw data file pancentromere2.xlsx.
+Fig2E was generated using the raw data file pancentromere3.xlsx.
 Fig2F was generated using the raw data file pancentromere4.xlsx.
 For Fig20, the raw data are embedded directly in the corresponding plotting script.
