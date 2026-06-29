@@ -1,0 +1,163 @@
+## ================================
+## Pancentromere abnormal frequency plot
+## Sample × Subgenome (A/B/R)
+## ================================
+
+# 1. 清空环境
+rm(list = ls())
+
+# 2. 加载必要包
+library(readxl)
+library(ggplot2)
+library(dplyr)
+
+# 3. 读取数据
+data <- read_excel("D:/Triticale/Fig/Fig5/pancentromere4.xlsx")
+
+# 4. 检查列名（应为 Sample, Subgenome, abnormal_prop）
+colnames(data)
+
+# 5. 设定样本顺序（严格按你给的）
+sample_order <- c("ZX830","62","57","72","75","103","91","94","87","89")
+
+data <- data %>%
+  mutate(
+    Sample = factor(Sample, levels = sample_order),
+    Subgenome = factor(Subgenome, levels = c("A","B","R"))
+  )
+
+# 6. 作图 - 细线条版本
+p <- ggplot(data, aes(x = Sample, y = abnormal_prop, fill = Subgenome)) +
+  # 柱状图：细边框，linewidth从0.6减小到0.3
+  geom_col(width = 0.7, color = "black", linewidth = 0.3) +
+  facet_wrap(~Subgenome, nrow = 1) +
+  scale_fill_manual(
+    values = c(
+      A = "#FFCCCC",
+      B = "#CCE5FF",
+      R = "#CCFFCC"
+    )
+  ) +
+  labs(
+    x = "Sample",
+    y = "Proportion of abnormal centromeres"
+  ) +
+  theme_bw(base_size = 13) +
+  theme(
+    # 去掉网格线
+    panel.grid = element_blank(),
+    
+    # 分面标题背景
+    strip.background = element_rect(
+      fill = "white", 
+      color = "black",  # 分面边框
+      linewidth = 0.3   # 分面边框粗细
+    ),
+    strip.text = element_text(face = "bold"),
+    
+    # X轴文字旋转
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    
+    # 隐藏图例
+    legend.position = "none",
+    
+    # ========== 细线条调整 ==========
+    # 面板边框变细（从默认的1.0减小到0.5）
+    panel.border = element_rect(color = "black", linewidth = 0.5),
+    
+    # 坐标轴线变细（默认0.5）
+    axis.line = element_line(linewidth = 0.3),
+    
+    # 刻度线变细变短
+    axis.ticks = element_line(linewidth = 0.3),
+    axis.ticks.length = unit(0.15, "cm"),
+    
+    # 分面间距调整（可选，使图形更紧凑）
+    panel.spacing = unit(0.5, "lines")
+  )
+
+# 7. 显示图形
+print(p)
+
+# 8. 保存高分辨率 PDF（主文可直接用）
+ggsave(
+  filename = "Fig5_Pancentromere_abnormal_frequency_ABR.pdf",
+  plot = p,
+  width = 10,
+  height = 4,
+  device = cairo_pdf
+)
+
+# 9. 可选：同时保存PNG版本用于预览
+ggsave(
+  filename = "Fig5_Pancentromere_abnormal_frequency_ABR.png",
+  plot = p,
+  width = 10,
+  height = 4,
+  dpi = 300
+)
+
+# 10. 可选：更细线条版本（适合高质量出版物）
+p_ultrathin <- ggplot(data, aes(x = Sample, y = abnormal_prop, fill = Subgenome)) +
+  # 极细边框柱状图
+  geom_col(width = 0.7, color = "black", linewidth = 0.2) +
+  facet_wrap(~Subgenome, nrow = 1) +
+  scale_fill_manual(
+    values = c(
+      A = "#FFCCCC",
+      B = "#CCE5FF",
+      R = "#CCFFCC"
+    )
+  ) +
+  labs(
+    x = "Sample",
+    y = "Proportion of abnormal centromeres"
+  ) +
+  theme_bw(base_size = 12) +  # 字体稍小
+  theme(
+    panel.grid = element_blank(),
+    strip.background = element_rect(
+      fill = "white", 
+      color = "black",
+      linewidth = 0.2
+    ),
+    strip.text = element_text(face = "bold", size = 10),
+    axis.text.x = element_text(angle = 45, hjust = 1, size = 9),
+    axis.text.y = element_text(size = 9),
+    axis.title = element_text(size = 10),
+    legend.position = "none",
+    # 极细线条
+    panel.border = element_rect(color = "black", linewidth = 0.3),
+    axis.line = element_line(linewidth = 0.2),
+    axis.ticks = element_line(linewidth = 0.2),
+    axis.ticks.length = unit(0.1, "cm"),
+    # 更紧凑的布局
+    panel.spacing = unit(0.3, "lines"),
+    plot.margin = margin(5, 5, 5, 5, "pt")
+  )
+
+# 显示极细版本
+print(p_ultrathin)
+
+# 保存极细版本
+ggsave(
+  filename = "Fig5_Pancentromere_abnormal_frequency_ABR_ultrathin.pdf",
+  plot = p_ultrathin,
+  width = 9,  # 稍窄
+  height = 3.5,  # 稍矮
+  device = cairo_pdf
+)
+
+# 11. 添加统计摘要
+cat("\n=== 数据统计摘要 ===\n")
+summary_stats <- data %>%
+  group_by(Subgenome) %>%
+  summarise(
+    n = n(),
+    mean = mean(abnormal_prop),
+    sd = sd(abnormal_prop),
+    median = median(abnormal_prop),
+    min = min(abnormal_prop),
+    max = max(abnormal_prop)
+  )
+print(summary_stats)
