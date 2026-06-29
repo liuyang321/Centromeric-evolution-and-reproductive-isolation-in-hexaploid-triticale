@@ -4,6 +4,7 @@ This repository provides all code and analysis workflows used to generate the fi
 
 The analyses include genome assembly comparison, subgenome-resolved structural variation detection, centromere evolution analysis, population genomic analyses (PCA), pan-centromere profiling, and synteny visualization between two hexaploid triticale genomes (ZX830 and PT) and their progenitor species.
 
-For Fig. 1A, the raw data are embedded directly in the corresponding plotting script.
+For Fig1A, the raw data are embedded directly in the corresponding plotting script.
 Fig2A was generated using the raw data file allcountry.csv.
 Fig2D was generated using the raw data file pancentromere2.xlsx.
+Fig20, the raw data are embedded directly in the corresponding plotting script.
